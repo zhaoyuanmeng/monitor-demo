@@ -10,8 +10,9 @@ import fetch from './fetch'
 import fps from './fps'
 import onVueRouter from './onVueRouter'
 import config from '../config'
-
+// 性能的监控
 export default function performance() {
+    // 监控上报页面指标信息
     observeEntries()
     observePaint()
     observeLCP()

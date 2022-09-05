@@ -1,6 +1,7 @@
 var monitor = (function () {
   'use strict';
 
+  // 不明白为什么要使用原型，可能是加快执行速度吧
   var originalProto = XMLHttpRequest.prototype;
   var originalOpen = originalProto.open;
   var originalSend = originalProto.send;
@@ -10,14 +11,9 @@ var monitor = (function () {
 
     if (Object.getOwnPropertySymbols) {
       var symbols = Object.getOwnPropertySymbols(object);
-
-      if (enumerableOnly) {
-        symbols = symbols.filter(function (sym) {
-          return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-        });
-      }
-
-      keys.push.apply(keys, symbols);
+      enumerableOnly && (symbols = symbols.filter(function (sym) {
+        return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
     }
 
     return keys;
@@ -25,19 +21,12 @@ var monitor = (function () {
 
   function _objectSpread2(target) {
     for (var i = 1; i < arguments.length; i++) {
-      var source = arguments[i] != null ? arguments[i] : {};
-
-      if (i % 2) {
-        ownKeys(Object(source), true).forEach(function (key) {
-          _defineProperty(target, key, source[key]);
-        });
-      } else if (Object.getOwnPropertyDescriptors) {
-        Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-      } else {
-        ownKeys(Object(source)).forEach(function (key) {
-          Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-        });
-      }
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys(Object(source), !0).forEach(function (key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function (key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
     }
 
     return target;
@@ -46,17 +35,11 @@ var monitor = (function () {
   function _typeof(obj) {
     "@babel/helpers - typeof";
 
-    if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
-      _typeof = function (obj) {
-        return typeof obj;
-      };
-    } else {
-      _typeof = function (obj) {
-        return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
-      };
-    }
-
-    return _typeof(obj);
+    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) {
+      return typeof obj;
+    } : function (obj) {
+      return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+    }, _typeof(obj);
   }
 
   function _defineProperty(obj, key, value) {
@@ -164,9 +147,12 @@ var monitor = (function () {
     }
 
     return target;
-  }
+  } // 当一条会话历史记录被执行的时候将会触发页面显示 (pageshow) 事件。
+  // (这包括了后退 / 前进按钮操作，同时也会在 onload 事件触发后初始化页面时触发)
+
   function onBFCacheRestore(callback) {
     window.addEventListener('pageshow', function (event) {
+      // persisted表示网页是否来自于缓存
       if (event.persisted) {
         callback(event);
       }
@@ -189,8 +175,11 @@ var monitor = (function () {
 
     window.addEventListener('visibilitychange', onHiddenOrPageHide, true);
     window.addEventListener('pagehide', onHiddenOrPageHide, true);
-  }
+  } // 就是保证加载后执行callback函数
+
   function executeAfterLoad(callback) {
+    // document.readyState  loading（加载中） interactive（文档已被解析，但是诸如图像，样式表和框架之类的子资源仍在加载） 
+    // complete（文档和所有子资源已完成加载。状态表示 load 事件即将被触发） 
     if (document.readyState === 'complete') {
       callback();
     } else {
@@ -201,7 +190,8 @@ var monitor = (function () {
 
       window.addEventListener('load', onLoad, true);
     }
-  }
+  } // 获取当前页面的url
+
   function getPageURL() {
     return window.location.href;
   }
@@ -242,9 +232,16 @@ var monitor = (function () {
     var _window$navigator;
 
     return !!((_window$navigator = window.navigator) !== null && _window$navigator !== void 0 && _window$navigator.sendBeacon);
-  }
-  var sendBeacon = isSupportSendBeacon() ? window.navigator.sendBeacon.bind(window.navigator) : reportWithXHR;
-  var sessionID = generateUniqueID();
+  } // 在 unload 事件中，使用 XHR 异步发送数据。这种做法有可能导致服务端未收到数据，浏览器就已经断开连接,，数据就会丢失。
+  // 虽然AJAX支持同步请求，但这种做法会阻塞页面的跳转，影响用户体验。
+  // 基于此引入Beacon这种方法，使用navigator.sendBeacon(url, data) 方法会使用户代理在有机会时异步地向服务器发送数据，
+  // 同时不会延迟页面的卸载或影响下一导航的载入性能。
+  // 所以这个sendBeacon 如果支持就是sendBeacon方法，如果不支持就是XMLHttpRequest的传统ajax形式
+
+  var sendBeacon = isSupportSendBeacon() ? window.navigator.sendBeacon.bind(window.navigator) : reportWithXHR; // 随机获取一个sessionID
+
+  var sessionID = generateUniqueID(); // 数据上报  暂时不知道isImmediate这个（立即）有什么用处
+
   function report(data) {
     var isImmediate = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
 
@@ -262,7 +259,11 @@ var monitor = (function () {
     if (isImmediate) {
       sendBeacon(config.url, reportData);
       return;
-    }
+    } //window.requestIdleCallback()**方法插入一个函数，这个函数将在浏览器空闲时期被调用。
+    // 这使开发者能够在主事件循环上执行后台和低优先级工作，而不会影响延迟关键事件，如动画和输入响应。
+    // 函数一般会按先进先调用的顺序执行，然而，如果回调函数指定了执行超时时间timeout，则有可能为了在超时前执行函数而打乱执行顺序。
+    // 这就是为了延迟执行    
+
 
     if (window.requestIdleCallback) {
       window.requestIdleCallback(function () {
@@ -276,7 +277,8 @@ var monitor = (function () {
       });
     }
   }
-  var timer$2 = null;
+  var timer$2 = null; // 加入了防抖的思想 不过每次点击都会把这个错误加入到cache中 只是停顿3s才会上报
+
   function lazyReportCache(data) {
     var timeout = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 3000;
     addCache(data);
@@ -300,6 +302,7 @@ var monitor = (function () {
     var _this = this,
         _config$vue;
 
+    // 这里利用了切片编程 跟vue2监听数组的方式改写本身方法思路一样
     var oldConsoleError = window.console.error;
 
     window.console.error = function () {
@@ -307,10 +310,13 @@ var monitor = (function () {
         args[_key] = arguments[_key];
       }
 
-      oldConsoleError.apply(_this, args);
+      // 保证了之前的方式
+      oldConsoleError.apply(_this, args); // 新增的处理
+
       lazyReportCache({
         type: 'error',
         subType: 'console-error',
+        // performance是全局对象可以直接引用在v8引擎下
         startTime: performance.now(),
         errData: args,
         pageURL: getPageURL()
@@ -350,7 +356,7 @@ var monitor = (function () {
         type: 'error',
         startTime: performance.now()
       });
-    }; // 监听 promise 错误 缺点是获取不到列数据
+    }; // 监听 promise 错误 缺点是获取不到列数据 后期补充优化方案
 
 
     window.addEventListener('unhandledrejection', function (e) {
@@ -363,7 +369,8 @@ var monitor = (function () {
         startTime: e.timeStamp,
         pageURL: getPageURL()
       });
-    });
+    }); // 这个就要对接上vue的报错了，vue会给我们提供一个回调函数的写法就是下面的这样
+    // 思路拓展一下 react的不也可以吗
 
     if ((_config$vue = config.vue) !== null && _config$vue !== void 0 && _config$vue.Vue) {
       config.vue.Vue.config.errorHandler = function (err, vm, info) {
@@ -377,13 +384,16 @@ var monitor = (function () {
           pageURL: getPageURL()
         });
       };
-    }
+    } // 这里表示也要检查缓存的页面数据
+
 
     onBFCacheRestore(function () {
       error();
     });
   }
 
+  // 判断是否支持PerformanceObserver 
+  // PerformanceObserver 可用于获取性能相关的数据，例如首帧fp、首屏fcp、首次有意义的绘制 fmp等等
   function isSupportPerformanceObserver() {
     return !!window.PerformanceObserver;
   }
@@ -396,6 +406,8 @@ var monitor = (function () {
   }
   var hasAlreadyCollected = false;
   function observeEvent(entryType) {
+    // 闭包的思路
+    // 这个是为了处理传统分析页面性能分析的（兼容Performance的写法）
     function entryHandler(list) {
       var data = list.getEntries ? list.getEntries() : list;
 
@@ -482,6 +494,7 @@ var monitor = (function () {
   }
 
   function filter(type) {
+    // 返回Boolean
     return preventType.includes(type);
   }
 
@@ -1121,6 +1134,7 @@ var monitor = (function () {
   function performance$1() {
     var _config$vue, _config$vue2;
 
+    // 监控上报页面指标信息
     observeEntries();
     observePaint();
     observeLCP();
@@ -1345,7 +1359,9 @@ var monitor = (function () {
   var monitor = {
     init: function init() {
       var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-      setConfig(options);
+      // 生成配置
+      setConfig(options); // 处理报错信息并上传
+
       error();
       performance$1();
       behavior(); // 当页面进入后台或关闭前时，将所有的 cache 数据进行上报

@@ -8,7 +8,9 @@ import { getCache, clearCache } from './utils/cache'
 
 const monitor = {
     init(options = {}) {
+        // 生成配置
         setConfig(options)
+        // 处理报错信息并上传
         error()
         performance()
         behavior();

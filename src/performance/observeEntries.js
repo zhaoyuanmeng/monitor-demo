@@ -11,6 +11,9 @@ export default function observeEntries() {
 
 let hasAlreadyCollected = false
 export function observeEvent(entryType) {
+    // 闭包的思路
+
+    // 这个是为了处理传统分析页面性能分析的（兼容Performance的写法）
     function entryHandler(list) {
         const data = list.getEntries ? list.getEntries() : list
         for (const entry of data) {
@@ -68,6 +71,7 @@ if (isSafari) {
 }
 
 function filter(type) {
+    // 返回Boolean
     return preventType.includes(type)
 }
 
