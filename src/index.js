@@ -12,6 +12,7 @@ const monitor = {
         setConfig(options)
         // 处理报错信息并上传
         error()
+        // 处理性能指标参数并上传
         performance()
         behavior();
 
